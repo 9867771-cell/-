@@ -1076,7 +1076,7 @@ function renderTmServicesTable(services) {
                 </span>
             </td>
             <td style="text-align:center;">${s.priority}</td>
-            <td>
+            <td style="white-space:nowrap;">
                 <button class="btn btn-secondary btn-sm" onclick="editTmService(${s.id})">编辑</button>
                 <button class="btn btn-secondary btn-sm" onclick="testTmServiceById(${s.id})">测试</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteTmService(${s.id}, '${escapeHtml(s.name)}')">删除</button>
@@ -1241,7 +1241,7 @@ function renderCpaServicesTable(services) {
                 </span>
             </td>
             <td style="text-align:center;">${s.priority}</td>
-            <td>
+            <td style="white-space:nowrap;">
                 <button class="btn btn-secondary btn-sm" onclick="editCpaService(${s.id})">编辑</button>
                 <button class="btn btn-secondary btn-sm" onclick="testCpaServiceById(${s.id})">测试</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteCpaService(${s.id}, '${escapeHtml(s.name)}')">删除</button>
@@ -1395,20 +1395,23 @@ async function loadSub2ApiServices() {
 function renderSub2ApiServices(services) {
     if (!elements.sub2ApiServicesTable) return;
     if (!services || services.length === 0) {
-        elements.sub2ApiServicesTable.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">暂无服务，点击"添加服务"按钮添加</td></tr>';
+        elements.sub2ApiServicesTable.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">暂无 Sub2API 服务，点击「添加服务」新增</td></tr>';
         return;
     }
     elements.sub2ApiServicesTable.innerHTML = services.map(s => `
         <tr>
             <td>${escapeHtml(s.name)}</td>
-            <td><code>${escapeHtml(s.api_url)}</code></td>
-            <td><span class="status-badge ${s.enabled ? 'active' : 'disabled'}">${s.enabled ? '已启用' : '已禁用'}</span></td>
-            <td>${s.priority}</td>
+            <td style="font-size:0.85rem;color:var(--text-muted);">${escapeHtml(s.api_url)}</td>
             <td>
-                <div class="action-buttons">
-                    <button class="btn btn-ghost btn-sm" onclick="editSub2ApiService(${s.id})" title="编辑">✏️</button>
-                    <button class="btn btn-ghost btn-sm" onclick="deleteSub2ApiService(${s.id}, '${escapeHtml(s.name)}')" title="删除">🗑️</button>
-                </div>
+                <span class="badge" style="background:${s.enabled ? 'var(--success-color)' : 'var(--border)'};color:${s.enabled ? '#fff' : 'var(--text-muted)'};font-size:0.75rem;padding:2px 8px;border-radius:10px;">
+                    ${s.enabled ? '启用' : '禁用'}
+                </span>
+            </td>
+            <td style="text-align:center;">${s.priority}</td>
+            <td style="white-space:nowrap;">
+                <button class="btn btn-secondary btn-sm" onclick="editSub2ApiService(${s.id})">编辑</button>
+                <button class="btn btn-secondary btn-sm" onclick="testSub2ApiServiceById(${s.id})">测试</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteSub2ApiService(${s.id}, '${escapeHtml(s.name)}')">删除</button>
             </td>
         </tr>
     `).join('');
@@ -1483,6 +1486,19 @@ async function handleSaveSub2ApiService(e) {
         loadSub2ApiServices();
     } catch (e) {
         toast.error('保存失败: ' + e.message);
+    }
+}
+
+async function testSub2ApiServiceById(id) {
+    try {
+        const result = await api.post(`/sub2api-services/${id}/test`);
+        if (result.success) {
+            toast.success(result.message);
+        } else {
+            toast.error(result.message);
+        }
+    } catch (e) {
+        toast.error('测试失败: ' + e.message);
     }
 }
 

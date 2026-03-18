@@ -83,6 +83,53 @@
             filter: blur(0);
         }
 
+        /* 自定义多选下拉 */
+        .multi-select-dropdown {
+            position: relative;
+            width: 100%;
+            font-size: 0.85rem;
+        }
+        .msd-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--surface);
+            color: var(--text-primary);
+            cursor: pointer;
+            user-select: none;
+        }
+        .msd-trigger:hover { border-color: var(--primary-color); }
+        .msd-arrow { font-size: 0.7rem; transition: transform 0.15s; }
+        .msd-dropdown.open .msd-arrow { transform: rotate(180deg); }
+        .msd-list {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0; right: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            z-index: 100;
+            max-height: 150px;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+        .msd-dropdown.open .msd-list { display: block; }
+        .msd-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+        .msd-item:hover { background: var(--surface-hover); }
+        .msd-item input[type=checkbox] { margin: 0; cursor: pointer; }
+        .msd-empty { padding: 8px 12px; color: var(--text-muted); font-size: 0.8rem; }
+
         /* 响应式 */
         @media (max-width: 1024px) {
             .two-column-layout {
@@ -231,8 +278,7 @@
                                         <span>上传到 CPA</span>
                                     </label>
                                     <div id="cpa-service-select-group" style="display:none; margin-top: 6px; margin-bottom: 8px; padding-left: 4px;">
-                                        <label style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; display:block;">选择 CPA 服务（可多选）</label>
-                                        <div id="cpa-service-checkboxes" style="display:flex; flex-direction:column; gap:4px; max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; padding:6px;"></div>
+                                        <div class="multi-select-dropdown" id="cpa-service-select"></div>
                                     </div>
 
                                     <!-- Sub2API -->
@@ -241,8 +287,7 @@
                                         <span>上传到 Sub2API</span>
                                     </label>
                                     <div id="sub2api-service-select-group" style="display:none; margin-top: 6px; margin-bottom: 8px; padding-left: 4px;">
-                                        <label style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; display:block;">选择 Sub2API 服务（可多选）</label>
-                                        <div id="sub2api-service-checkboxes" style="display:flex; flex-direction:column; gap:4px; max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; padding:6px;"></div>
+                                        <div class="multi-select-dropdown" id="sub2api-service-select"></div>
                                     </div>
 
                                     <!-- Team Manager -->
@@ -251,8 +296,7 @@
                                         <span>上传到 Team Manager</span>
                                     </label>
                                     <div id="tm-service-select-group" style="display:none; margin-top: 6px; padding-left: 4px;">
-                                        <label style="font-size:0.85rem; color:var(--text-muted); margin-bottom:4px; display:block;">选择 TM 服务（可多选）</label>
-                                        <div id="tm-service-checkboxes" style="display:flex; flex-direction:column; gap:4px; max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; padding:6px;"></div>
+                                        <div class="multi-select-dropdown" id="tm-service-select"></div>
                                     </div>
                                 </div>
 
