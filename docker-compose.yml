@@ -10,6 +10,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
+      - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
       # Web UI 配置（也可在 .env 文件中设置）
       - APP_HOST=0.0.0.0
