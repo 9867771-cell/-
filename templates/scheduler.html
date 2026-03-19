@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>定时任务 - OpenAI 注册系统</title>
+    <link rel="stylesheet" href="/static/css/style.css?v={{ static_version }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310a37f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='4' width='18' height='18' rx='2' ry='2'/><line x1='16' y1='2' x2='16' y2='6'/><line x1='8' y1='2' x2='8' y2='6'/><line x1='3' y1='10' x2='21' y2='10'/></svg>">
+    <style>
+        .task-grid { display: grid; gap: var(--spacing-md); }
+        .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--spacing-md); }
+        .task-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); }
+        .task-card-header h3 { margin: 0; font-size: 1rem; }
+        .task-card-meta { display: flex; gap: var(--spacing-md); flex-wrap: wrap; font-size: 0.85rem; color: var(--text-muted); margin-bottom: var(--spacing-sm); }
+        .task-card-meta span { display: flex; align-items: center; gap: 4px; }
+        .task-card-actions { display: flex; gap: var(--spacing-xs); }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+        .badge-on { background: rgba(16,163,127,0.15); color: #10a37f; }
+        .badge-off { background: rgba(255,100,100,0.15); color: #e55; }
+        .badge-running { background: rgba(59,130,246,0.15); color: #3b82f6; }
+        .badge-completed { background: rgba(16,163,127,0.15); color: #10a37f; }
+        .badge-failed { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--spacing-md); }
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-overlay .modal-box { background: var(--surface); border-radius: var(--radius-lg); padding: var(--spacing-lg); width: 90%; max-width: 640px; max-height: 85vh; overflow-y: auto; }
+        .modal-overlay .modal-box h2 { margin: 0 0 var(--spacing-md) 0; font-size: 1.2rem; display: flex; align-items: center; gap: 8px; }
+        .tab-bar { display: flex; gap: var(--spacing-xs); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border); }
+        .tab-btn { padding: var(--spacing-sm) var(--spacing-md); background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .history-table th, .history-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        .history-table th { color: var(--text-muted); font-weight: 500; }
+        .empty-state { text-align: center; padding: var(--spacing-xl); color: var(--text-muted); }
+        .empty-state .icon { width: 48px; height: 48px; margin-bottom: var(--spacing-sm); opacity: 0.5; }
+        .msd-dropdown { position: relative; font-size: 0.85rem; }
+        .msd-trigger { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-primary); cursor: pointer; user-select: none; }
+        .msd-trigger:hover { border-color: var(--primary); }
+        .msd-arrow { font-size: 0.7rem; transition: transform 0.15s; }
+        .msd-dropdown.open .msd-arrow { transform: rotate(180deg); }
+        .msd-list { display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 1100; max-height: 150px; overflow-y: auto; padding: 4px 0; }
+        .msd-dropdown.open .msd-list { display: block; }
+        .msd-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; }
+        .msd-item:hover { background: rgba(128,128,128,0.1); }
+        .msd-item input[type=checkbox] { margin: 0; cursor: pointer; }
+        .msd-empty { padding: 8px 12px; color: var(--text-muted); font-size: 0.8rem; }
+        .svc-select-group { display: none; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand"><h1>OpenAI 注册系统</h1></div>
+            <div class="nav-links">
+                <a href="/" class="nav-link">注册</a>
+                <a href="/accounts" class="nav-link">账号管理</a>
+                <a href="/email-services" class="nav-link">邮箱服务</a>
+                <a href="/payment" class="nav-link">支付</a>
+                <a href="/scheduler" class="nav-link active">定时任务</a>
+                <a href="/settings" class="nav-link">设置</a>
+                <a href="/logout" class="nav-link">退出</a>
+            </div>
+            <button class="theme-toggle" onclick="theme.toggle()" title="切换主题">
+                <svg class="icon"><use href="/static/icons.svg#i-moon"/></svg>
+            </button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Tab 栏 -->
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('tasks')">
+                    <svg class="icon-sm"><use href="/static/icons.svg#i-calendar"/></svg> 任务列表
+                </button>
+                <button class="tab-btn" onclick="switchTab('history')">
+                    <svg class="icon-sm"><use href="/static/icons.svg#i-history"/></svg> 执行历史
+                </button>
+            </div>
+
+            <!-- 任务列表 Tab -->
+            <div id="tab-tasks" class="tab-content active">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--spacing-md)">
+                    <h2 style="margin:0">定时任务</h2>
+                    <button class="btn btn-primary" onclick="openCreateModal()">
+                        <svg class="icon-sm"><use href="/static/icons.svg#i-plus"/></svg> 新建任务
+                    </button>
+                </div>
+                <div id="taskList" class="task-grid">
+                    <div class="empty-state">
+                        <svg class="icon"><use href="/static/icons.svg#i-calendar"/></svg>
+                        <p>暂无定时任务</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 执行历史 Tab -->
+            <div id="tab-history" class="tab-content">
+                <h2 style="margin:0 0 var(--spacing-md) 0">执行历史</h2>
+                <div class="card">
+                    <table class="history-table">
+                        <thead><tr>
+                            <th>任务名称</th><th>状态</th><th>总数</th><th>成功</th><th>失败</th><th>开始时间</th><th>结束时间</th>
+                        </tr></thead>
+                        <tbody id="historyBody">
+                            <tr><td colspan="7" class="empty-state">暂无执行记录</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 创建/编辑 Modal -->
+    <div id="taskModal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal-box">
+            <h2 id="modalTitle">
+                <svg class="icon"><use href="/static/icons.svg#i-plus"/></svg> 新建定时任务
+            </h2>
+            <form id="taskForm" onsubmit="return saveTask(event)">
+                <input type="hidden" id="editTaskId" value="">
+                <div class="form-group">
+                    <label>任务名称</label>
+                    <input type="text" id="f_name" required placeholder="例如：每日凌晨注册">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>执行时间（时）</label>
+                        <input type="number" id="f_hour" min="0" max="23" value="3" required>
+                    </div>
+                    <div class="form-group">
+                        <label>执行时间（分）</label>
+                        <input type="number" id="f_minute" min="0" max="59" value="0" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>邮箱服务类型</label>
+                        <select id="f_email_service_type">
+                            <option value="tempmail">Tempmail</option>
+                            <option value="outlook">Outlook</option>
+                            <option value="custom_domain">自定义域名</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>注册数量</label>
+                        <input type="number" id="f_count" min="1" max="50000" value="10" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>并发模式</label>
+                        <select id="f_mode">
+                            <option value="pipeline">流水线</option>
+                            <option value="parallel">并行</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>并发数</label>
+                        <input type="number" id="f_concurrency" min="1" max="500" value="5">
+                    </div>
+                </div>
+                <div class="form-row-3">
+                    <div class="form-group">
+                        <label>最小间隔(秒)</label>
+                        <input type="number" id="f_interval_min" min="0" value="5">
+                    </div>
+                    <div class="form-group">
+                        <label>最大间隔(秒)</label>
+                        <input type="number" id="f_interval_max" min="0" value="30">
+                    </div>
+                    <div class="form-group">
+                        <label>代理</label>
+                        <input type="text" id="f_proxy" placeholder="可选">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="f_auto_upload_cpa"> 自动上传到 CPA</label>
+                    <div id="f_cpa_select_group" class="svc-select-group">
+                        <div id="f_cpa_service_select"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="f_auto_upload_sub2api"> 自动上传到 Sub2API</label>
+                    <div id="f_sub2api_select_group" class="svc-select-group">
+                        <div id="f_sub2api_service_select"></div>
+                        <input type="text" id="f_sub2api_group_id" placeholder="分组 ID（可选）" style="margin-top:4px">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="f_auto_upload_tm"> 自动上传到 Team Manager</label>
+                    <div id="f_tm_select_group" class="svc-select-group">
+                        <div id="f_tm_service_select"></div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:var(--spacing-sm);justify-content:flex-end;margin-top:var(--spacing-md)">
+                    <button type="button" class="btn" onclick="closeModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">
+                        <svg class="icon-sm"><use href="/static/icons.svg#i-save"/></svg> 保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+<script src="/static/js/theme.js?v={{ static_version }}"></script>
+<script>
+const API = '/api/scheduler';
+let allTasks = [];
+let svcCache = { cpa: [], sub2api: [], tm: [] };
+
+function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i === (name==='tasks'?0:1)));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-'+name).classList.add('active');
+    if (name === 'history') loadHistory();
+}
+
+// ===== 多选下拉组件 =====
+async function loadAllServices() {
+    const [cpa, sub2api, tm] = await Promise.all([
+        fetch('/api/cpa-services?enabled=true').then(r=>r.json()).catch(()=>[]),
+        fetch('/api/sub2api-services?enabled=true').then(r=>r.json()).catch(()=>[]),
+        fetch('/api/tm-services?enabled=true').then(r=>r.json()).catch(()=>[]),
+    ]);
+    svcCache = { cpa, sub2api, tm };
+    buildMsd('f_cpa_service_select', cpa);
+    buildMsd('f_sub2api_service_select', sub2api);
+    buildMsd('f_tm_service_select', tm);
+    // checkbox 联动
+    ['cpa','sub2api','tm'].forEach(key => {
+        const cb = document.getElementById('f_auto_upload_' + key);
+        const grp = document.getElementById('f_' + key + '_select_group');
+        if (cb && grp) cb.addEventListener('change', () => grp.style.display = cb.checked ? 'block' : 'none');
+    });
+}
+
+function buildMsd(containerId, services) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!services.length) { el.innerHTML = '<div class="msd-empty">暂无可用服务</div>'; return; }
+    const ddId = containerId + '-dd';
+    el.innerHTML = `<div class="msd-dropdown" id="${ddId}">
+        <div class="msd-trigger" onclick="toggleMsd('${ddId}')"><span class="msd-label">未选择</span><span class="msd-arrow">▼</span></div>
+        <div class="msd-list">${services.map(s => `<label class="msd-item"><input type="checkbox" value="${s.id}"><span>${s.name}</span></label>`).join('')}</div>
+    </div>`;
+    el.querySelectorAll('.msd-item input').forEach(cb => cb.addEventListener('change', () => updateMsdLabel(ddId)));
+    document.addEventListener('click', e => { const dd = document.getElementById(ddId); if (dd && !dd.contains(e.target)) dd.classList.remove('open'); }, true);
+}
+
+function toggleMsd(ddId) { const dd = document.getElementById(ddId); if (dd) dd.classList.toggle('open'); }
+
+function updateMsdLabel(ddId) {
+    const dd = document.getElementById(ddId); if (!dd) return;
+    const all = dd.querySelectorAll('.msd-item input'), checked = dd.querySelectorAll('.msd-item input:checked'), label = dd.querySelector('.msd-label');
+    if (!label) return;
+    if (checked.length === 0) label.textContent = '未选择';
+    else if (checked.length === all.length) label.textContent = `全部 (${all.length})`;
+    else label.textContent = Array.from(checked).map(c => c.nextElementSibling.textContent).join(', ');
+}
+
+function getMsdIds(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return [];
+    return Array.from(el.querySelectorAll('.msd-item input:checked')).map(cb => parseInt(cb.value));
+}
+
+function setMsdIds(containerId, ids) {
+    const el = document.getElementById(containerId); if (!el) return;
+    const idSet = new Set((ids||[]).map(Number));
+    el.querySelectorAll('.msd-item input').forEach(cb => { cb.checked = idSet.has(parseInt(cb.value)); });
+    const ddId = containerId + '-dd';
+    updateMsdLabel(ddId);
+}
+
+// ===== Modal =====
+function openCreateModal() {
+    document.getElementById('editTaskId').value = '';
+    document.getElementById('modalTitle').innerHTML = '<svg class="icon"><use href="/static/icons.svg#i-plus"/></svg> 新建定时任务';
+    document.getElementById('taskForm').reset();
+    document.getElementById('f_hour').value = 3;
+    document.getElementById('f_minute').value = 0;
+    document.getElementById('f_count').value = 10;
+    document.getElementById('f_concurrency').value = 5;
+    document.getElementById('f_interval_min').value = 5;
+    document.getElementById('f_interval_max').value = 30;
+    // 重置多选下拉
+    ['f_cpa_service_select','f_sub2api_service_select','f_tm_service_select'].forEach(id => setMsdIds(id, []));
+    ['f_cpa_select_group','f_sub2api_select_group','f_tm_select_group'].forEach(id => { const g = document.getElementById(id); if(g) g.style.display='none'; });
+    // 重置分组
+    const gInput = document.getElementById('f_sub2api_group_id');
+    if (gInput) gInput.value = '';
+    document.getElementById('taskModal').classList.add('active');
+}
+
+function openEditModal(id) {
+    const t = allTasks.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('editTaskId').value = id;
+    document.getElementById('modalTitle').innerHTML = '<svg class="icon"><use href="/static/icons.svg#i-pencil"/></svg> 编辑定时任务';
+    document.getElementById('f_name').value = t.name;
+    document.getElementById('f_hour').value = t.hour;
+    document.getElementById('f_minute').value = t.minute;
+    document.getElementById('f_email_service_type').value = t.email_service_type;
+    document.getElementById('f_count').value = t.count;
+    document.getElementById('f_mode').value = t.mode;
+    document.getElementById('f_concurrency').value = t.concurrency;
+    document.getElementById('f_interval_min').value = t.interval_min;
+    document.getElementById('f_interval_max').value = t.interval_max;
+    document.getElementById('f_proxy').value = t.proxy || '';
+    // CPA
+    document.getElementById('f_auto_upload_cpa').checked = t.auto_upload_cpa;
+    setMsdIds('f_cpa_service_select', t.cpa_service_ids);
+    document.getElementById('f_cpa_select_group').style.display = t.auto_upload_cpa ? 'block' : 'none';
+    // Sub2API
+    document.getElementById('f_auto_upload_sub2api').checked = t.auto_upload_sub2api;
+    setMsdIds('f_sub2api_service_select', t.sub2api_service_ids);
+    document.getElementById('f_sub2api_group_id').value = t.sub2api_group_id || '';
+    document.getElementById('f_sub2api_select_group').style.display = t.auto_upload_sub2api ? 'block' : 'none';
+    // TM
+    document.getElementById('f_auto_upload_tm').checked = t.auto_upload_tm;
+    setMsdIds('f_tm_service_select', t.tm_service_ids);
+    document.getElementById('f_tm_select_group').style.display = t.auto_upload_tm ? 'block' : 'none';
+    document.getElementById('taskModal').classList.add('active');
+}
+
+function closeModal() { document.getElementById('taskModal').classList.remove('active'); }
+
+async function saveTask(e) {
+    e.preventDefault();
+    const id = document.getElementById('editTaskId').value;
+    const body = {
+        name: document.getElementById('f_name').value,
+        hour: parseInt(document.getElementById('f_hour').value),
+        minute: parseInt(document.getElementById('f_minute').value),
+        email_service_type: document.getElementById('f_email_service_type').value,
+        count: parseInt(document.getElementById('f_count').value),
+        mode: document.getElementById('f_mode').value,
+        concurrency: parseInt(document.getElementById('f_concurrency').value),
+        interval_min: parseInt(document.getElementById('f_interval_min').value),
+        interval_max: parseInt(document.getElementById('f_interval_max').value),
+        proxy: document.getElementById('f_proxy').value || null,
+        auto_upload_cpa: document.getElementById('f_auto_upload_cpa').checked,
+        cpa_service_ids: getMsdIds('f_cpa_service_select'),
+        auto_upload_sub2api: document.getElementById('f_auto_upload_sub2api').checked,
+        sub2api_service_ids: getMsdIds('f_sub2api_service_select'),
+        sub2api_group_id: document.getElementById('f_sub2api_group_id').value || null,
+        auto_upload_tm: document.getElementById('f_auto_upload_tm').checked,
+        tm_service_ids: getMsdIds('f_tm_service_select'),
+    };
+    const url = id ? `${API}/tasks/${id}` : `${API}/tasks`;
+    const method = id ? 'PATCH' : 'POST';
+    const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    if (res.ok) { closeModal(); loadTasks(); } else { const d = await res.json(); alert(d.detail || '保存失败'); }
+    return false;
+}
+
+async function toggleTask(id) {
+    await fetch(`${API}/tasks/${id}/toggle`, {method:'POST'});
+    loadTasks();
+}
+
+async function deleteTask(id) {
+    if (!confirm('确定删除此定时任务？')) return;
+    await fetch(`${API}/tasks/${id}`, {method:'DELETE'});
+    loadTasks();
+}
+
+function renderTasks(tasks) {
+    const el = document.getElementById('taskList');
+    if (!tasks.length) {
+        el.innerHTML = '<div class="empty-state"><svg class="icon"><use href="/static/icons.svg#i-calendar"/></svg><p>暂无定时任务</p></div>';
+        return;
+    }
+    el.innerHTML = tasks.map(t => `
+        <div class="task-card">
+            <div class="task-card-header">
+                <h3>${t.name}</h3>
+                <span class="badge ${t.enabled?'badge-on':'badge-off'}">${t.enabled?'已启用':'已禁用'}</span>
+            </div>
+            <div class="task-card-meta">
+                <span><svg class="icon-sm"><use href="/static/icons.svg#i-clock"/></svg> 每天 ${String(t.hour).padStart(2,'0')}:${String(t.minute).padStart(2,'0')}</span>
+                <span><svg class="icon-sm"><use href="/static/icons.svg#i-mail"/></svg> ${t.email_service_type}</span>
+                <span><svg class="icon-sm"><use href="/static/icons.svg#i-rocket"/></svg> ${t.count}个 / ${t.mode==='parallel'?'并行':'流水线'} x${t.concurrency}</span>
+                ${t.last_run_at ? `<span><svg class="icon-sm"><use href="/static/icons.svg#i-history"/></svg> 上次: ${new Date(t.last_run_at).toLocaleString()}</span>` : ''}
+            </div>
+            <div class="task-card-actions">
+                <button class="btn btn-sm" onclick="toggleTask(${t.id})" title="${t.enabled?'禁用':'启用'}">
+                    <svg class="icon-sm"><use href="/static/icons.svg#i-${t.enabled?'pause':'play'}"/></svg>
+                </button>
+                <button class="btn btn-sm" onclick="openEditModal(${t.id})" title="编辑">
+                    <svg class="icon-sm"><use href="/static/icons.svg#i-pencil"/></svg>
+                </button>
+                <button class="btn btn-sm" onclick="deleteTask(${t.id})" title="删除">
+                    <svg class="icon-sm"><use href="/static/icons.svg#i-trash"/></svg>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadTasks() {
+    const res = await fetch(`${API}/tasks`);
+    allTasks = await res.json();
+    renderTasks(allTasks);
+}
+
+async function loadHistory() {
+    const res = await fetch(`${API}/history`);
+    const rows = await res.json();
+    const tbody = document.getElementById('historyBody');
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无执行记录</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r => `<tr>
+        <td>${r.task_name||'-'}</td>
+        <td><span class="badge badge-${r.status}">${r.status}</span></td>
+        <td>${r.total}</td><td>${r.success_count}</td><td>${r.failed_count}</td>
+        <td>${r.started_at ? new Date(r.started_at).toLocaleString() : '-'}</td>
+        <td>${r.completed_at ? new Date(r.completed_at).toLocaleString() : '-'}</td>
+    </tr>`).join('');
+}
+
+loadTasks();
+loadAllServices();
+</script>
+</body>
+</html>

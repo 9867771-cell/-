@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>系统设置 - OpenAI 注册系统</title>
     <link rel="stylesheet" href="/static/css/style.css?v={{ static_version }}">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310a37f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z'/></svg>">
 </head>
 <body>
     <div class="container">
@@ -19,11 +19,12 @@
                 <a href="/accounts" class="nav-link">账号管理</a>
                 <a href="/email-services" class="nav-link">邮箱服务</a>
                 <a href="/payment" class="nav-link">支付</a>
+                <a href="/scheduler" class="nav-link">定时任务</a>
                 <a href="/settings" class="nav-link active">设置</a>
                 <a href="/logout" class="nav-link">退出</a>
             </div>
             <button class="theme-toggle" onclick="theme.toggle()" title="切换主题">
-                🌙
+                <svg class="icon"><use href="/static/icons.svg#i-moon"/></svg>
             </button>
         </nav>
 
@@ -36,13 +37,13 @@
 
             <!-- 设置标签页 -->
             <div class="tabs">
-                <button class="tab-btn active" data-tab="proxy">🌐 代理设置</button>
-                <button class="tab-btn" data-tab="webui">🔒 访问控制</button>
-                <button class="tab-btn" data-tab="upload">☁️ 上传</button>
-                <button class="tab-btn" data-tab="outlook">📮 Outlook配置</button>
-                <button class="tab-btn" data-tab="registration">⚙️ 注册配置</button>
-                <button class="tab-btn" data-tab="email-code">📧 验证码配置</button>
-                <button class="tab-btn" data-tab="database">💾 数据库</button>
+                <button class="tab-btn active" data-tab="proxy"><svg class="icon"><use href="/static/icons.svg#i-globe"/></svg> 代理设置</button>
+                <button class="tab-btn" data-tab="webui"><svg class="icon"><use href="/static/icons.svg#i-lock"/></svg> 访问控制</button>
+                <button class="tab-btn" data-tab="upload"><svg class="icon"><use href="/static/icons.svg#i-cloud"/></svg> 上传</button>
+                <button class="tab-btn" data-tab="outlook"><svg class="icon"><use href="/static/icons.svg#i-mail"/></svg> Outlook配置</button>
+                <button class="tab-btn" data-tab="registration"><svg class="icon"><use href="/static/icons.svg#i-gear"/></svg> 注册配置</button>
+                <button class="tab-btn" data-tab="email-code"><svg class="icon"><use href="/static/icons.svg#i-mail"/></svg> 验证码配置</button>
+                <button class="tab-btn" data-tab="database"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 数据库</button>
             </div>
 
             <!-- 代理设置 -->
@@ -82,8 +83,8 @@
                                 <small style="color: var(--text-muted);">若 API 返回 JSON，填写点号分隔的字段路径提取代理 URL；留空则将响应原文作为代理 URL</small>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存设置</button>
-                                <button type="button" class="btn btn-secondary" id="test-dynamic-proxy-btn">🔌 测试动态代理</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存设置</button>
+                                <button type="button" class="btn btn-secondary" id="test-dynamic-proxy-btn"><svg class="icon"><use href="/static/icons.svg#i-zap"/></svg> 测试动态代理</button>
                             </div>
                         </form>
                     </div>
@@ -94,8 +95,8 @@
                     <div class="card-header">
                         <h3>代理列表</h3>
                         <div style="display: flex; gap: var(--spacing-sm);">
-                            <button class="btn btn-secondary btn-sm" id="test-all-proxies-btn">🔌 测试全部</button>
-                            <button class="btn btn-primary btn-sm" id="add-proxy-btn">➕ 添加代理</button>
+                            <button class="btn btn-secondary btn-sm" id="test-all-proxies-btn"><svg class="icon"><use href="/static/icons.svg#i-zap"/></svg> 测试全部</button>
+                            <button class="btn btn-primary btn-sm" id="add-proxy-btn"><svg class="icon"><use href="/static/icons.svg#i-plus"/></svg> 添加代理</button>
                         </div>
                     </div>
                     <div class="card-body" style="padding: 0;">
@@ -117,7 +118,7 @@
                                     <tr>
                                         <td colspan="7">
                                             <div class="empty-state">
-                                                <div class="empty-state-icon">🌐</div>
+                                                <div class="empty-state-icon"><svg style="width:2em;height:2em;display:inline-block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><use href="/static/icons.svg#i-globe"/></svg></div>
                                                 <div class="empty-state-title">暂无代理</div>
                                                 <div class="empty-state-description">点击"添加代理"按钮添加代理服务器</div>
                                             </div>
@@ -144,7 +145,7 @@
                                 <input type="password" id="webui-access-password" name="access_password" placeholder="留空保持不变" autocomplete="new-password">
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存设置</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存设置</button>
                             </div>
                         </form>
                     </div>
@@ -194,7 +195,7 @@
                             </div>
                             <div class="form-actions">
                                 <button type="button" class="btn btn-secondary" id="cancel-proxy-btn">取消</button>
-                                <button type="submit" class="btn btn-primary">💾 保存</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存</button>
                             </div>
                         </form>
                     </div>
@@ -206,7 +207,7 @@
                 <!-- CPA 服务管理 -->
                 <div class="card" style="margin-top: var(--spacing-lg);">
                     <div class="card-header">
-                        <h3>☁️ CPA 服务</h3>
+                        <h3><svg class="icon"><use href="/static/icons.svg#i-cloud"/></svg> CPA 服务</h3>
                         <button class="btn btn-primary btn-sm" id="add-cpa-service-btn">+ 添加服务</button>
                     </div>
                     <div class="card-body" style="padding: 0;">
@@ -232,7 +233,7 @@
                 <!-- Sub2API 服务管理 -->
                 <div class="card" style="margin-top: var(--spacing-lg);">
                     <div class="card-header">
-                        <h3>🔗 Sub2API 服务</h3>
+                        <h3><svg class="icon"><use href="/static/icons.svg#i-link"/></svg> Sub2API 服务</h3>
                         <button class="btn btn-primary btn-sm" id="add-sub2api-service-btn">+ 添加服务</button>
                     </div>
                     <div class="card-body" style="padding: 0;">
@@ -258,7 +259,7 @@
                 <!-- Team Manager 服务管理 -->
                 <div class="card" style="margin-top: var(--spacing-lg);">
                     <div class="card-header">
-                        <h3>🚀 Team Manager 服务</h3>
+                        <h3><svg class="icon"><use href="/static/icons.svg#i-rocket"/></svg> Team Manager 服务</h3>
                         <button class="btn btn-primary btn-sm" id="add-tm-service-btn">+ 添加服务</button>
                     </div>
                     <div class="card-body" style="padding: 0;">
@@ -318,8 +319,8 @@
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存</button>
-                                <button type="button" class="btn btn-secondary" id="test-tm-service-btn">🔌 测试连接</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存</button>
+                                <button type="button" class="btn btn-secondary" id="test-tm-service-btn"><svg class="icon"><use href="/static/icons.svg#i-zap"/></svg> 测试连接</button>
                                 <button type="button" class="btn btn-secondary" id="cancel-tm-service-btn">取消</button>
                             </div>
                         </form>
@@ -363,8 +364,8 @@
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存</button>
-                                <button type="button" class="btn btn-secondary" id="test-sub2api-service-btn">🔌 测试连接</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存</button>
+                                <button type="button" class="btn btn-secondary" id="test-sub2api-service-btn"><svg class="icon"><use href="/static/icons.svg#i-zap"/></svg> 测试连接</button>
                                 <button type="button" class="btn btn-secondary" id="cancel-sub2api-service-btn">取消</button>
                             </div>
                         </form>
@@ -409,8 +410,8 @@
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存</button>
-                                <button type="button" class="btn btn-secondary" id="test-cpa-service-btn">🔌 测试连接</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存</button>
+                                <button type="button" class="btn btn-secondary" id="test-cpa-service-btn"><svg class="icon"><use href="/static/icons.svg#i-zap"/></svg> 测试连接</button>
                                 <button type="button" class="btn btn-secondary" id="cancel-cpa-service-btn">取消</button>
                             </div>
                         </form>
@@ -435,7 +436,7 @@
                             </div>
 
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存设置</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存设置</button>
                             </div>
                         </form>
                     </div>
@@ -480,7 +481,7 @@
                             </div>
 
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存设置</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存设置</button>
                             </div>
                         </form>
                     </div>
@@ -511,7 +512,7 @@
                             </div>
 
                             <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">💾 保存设置</button>
+                                <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存设置</button>
                             </div>
                         </form>
                     </div>
@@ -560,8 +561,8 @@
                         </div>
 
                         <div class="form-actions">
-                            <button class="btn btn-secondary" id="backup-btn">💾 备份数据库</button>
-                            <button class="btn btn-warning" id="cleanup-btn">🧹 清理过期数据</button>
+                            <button class="btn btn-secondary" id="backup-btn"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 备份数据库</button>
+                            <button class="btn btn-warning" id="cleanup-btn"><svg class="icon"><use href="/static/icons.svg#i-broom"/></svg> 清理过期数据</button>
                         </div>
                     </div>
                 </div>

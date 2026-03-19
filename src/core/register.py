@@ -4,12 +4,13 @@
 """
 
 import re
+import base64
 import json
 import time
 import logging
 import secrets
 import string
-from typing import Optional, Dict, Any, Tuple, Callable
+from typing import Optional, Dict, Any, Tuple, Callable, List
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -34,6 +35,133 @@ from ..config.settings import get_settings
 
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_lookup_key(value: str) -> str:
+    """归一化键名，便于兼容下划线、短横线和大小写差异。"""
+    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
+
+
+def _is_workspace_id_key(key: str) -> bool:
+    """判断一个字段名是否可能直接携带 workspace/org id。"""
+    normalized = _normalize_lookup_key(key)
+    if normalized == "id":
+        return False
+    if "workspace" in normalized and "id" in normalized:
+        return True
+    if "organization" in normalized and "id" in normalized:
+        return True
+    return normalized.startswith("org") and "id" in normalized
+
+
+def _is_workspace_path(path: str) -> bool:
+    """判断当前路径是否位于 workspace/org 相关对象下。"""
+    parts = [
+        _normalize_lookup_key(part)
+        for part in re.split(r"[.\[\]]+", path)
+        if part
+    ]
+    return any(
+        part in {
+            "workspace",
+            "workspaces",
+            "organization",
+            "organizations",
+            "org",
+            "orgs",
+            "activeorg",
+            "selectedorg",
+        }
+        or part.endswith("workspace")
+        or part.endswith("workspaces")
+        or part.endswith("organization")
+        or part.endswith("organizations")
+        for part in parts
+    )
+
+
+def _decode_auth_cookie_payloads(auth_cookie: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """尽可能解码授权 Cookie 中的 JSON payload。"""
+    payloads: List[Tuple[str, Dict[str, Any]]] = []
+    seen_candidates = set()
+    candidates = [("cookie", auth_cookie)]
+
+    if "." in auth_cookie:
+        candidates.extend(
+            (f"segment[{index}]", segment)
+            for index, segment in enumerate(auth_cookie.split("."))
+        )
+
+    for label, candidate in candidates:
+        candidate = (candidate or "").strip()
+        if not candidate or candidate in seen_candidates:
+            continue
+
+        seen_candidates.add(candidate)
+        pad = "=" * ((4 - (len(candidate) % 4)) % 4)
+
+        try:
+            decoded = base64.urlsafe_b64decode((candidate + pad).encode("ascii"))
+            payload = json.loads(decoded.decode("utf-8"))
+        except Exception:
+            continue
+
+        if isinstance(payload, dict):
+            payloads.append((label, payload))
+
+    return payloads
+
+
+def _collect_workspace_candidates(value: Any, path: str = "auth") -> List[Tuple[str, str]]:
+    """递归收集 payload 中可能的 workspace/org id。"""
+    candidates: List[Tuple[str, str]] = []
+
+    if isinstance(value, dict):
+        for key, raw_value in value.items():
+            if _is_workspace_id_key(str(key)):
+                candidate = str(raw_value or "").strip()
+                if candidate:
+                    candidates.append((candidate, f"{path}.{key}"))
+
+        ordered_keys = sorted(
+            value.keys(),
+            key=lambda item: (0 if _is_workspace_path(f"{path}.{item}") else 1, str(item)),
+        )
+        for key in ordered_keys:
+            child_value = value[key]
+            if isinstance(child_value, (dict, list)):
+                candidates.extend(_collect_workspace_candidates(child_value, f"{path}.{key}"))
+
+        current_id = str(value.get("id") or "").strip()
+        if current_id and _is_workspace_path(path):
+            candidates.append((current_id, f"{path}.id"))
+
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            candidates.extend(_collect_workspace_candidates(item, f"{path}[{index}]"))
+
+    deduped: List[Tuple[str, str]] = []
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+
+    return deduped
+
+
+def _extract_workspace_id_from_auth_cookie(
+    auth_cookie: str,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """从授权 Cookie 中提取 workspace/org id。"""
+    for source, payload in _decode_auth_cookie_payloads(auth_cookie):
+        candidates = _collect_workspace_candidates(payload)
+        if candidates:
+            workspace_id, path = candidates[0]
+            return workspace_id, source, path
+
+    return None, None, None
 
 
 @dataclass
@@ -135,24 +263,16 @@ class RegistrationEngine:
         self._is_existing_account: bool = False  # 是否为已注册账号（用于自动登录）
 
     def _log(self, message: str, level: str = "info"):
-        """记录日志"""
+        """记录日志（仅内存 + WebSocket 推送，不再逐条写数据库）"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_message = f"[{timestamp}] {message}"
 
-        # 添加到日志列表
+        # 添加到内存日志列表（任务结束后一次性写入数据库）
         self.logs.append(log_message)
 
-        # 调用回调函数
+        # 调用回调函数（WebSocket 实时推送）
         if self.callback_logger:
             self.callback_logger(log_message)
-
-        # 记录到数据库（如果有关联任务）
-        if self.task_uuid:
-            try:
-                with get_db() as db:
-                    crud.append_task_log(db, self.task_uuid, log_message)
-            except Exception as e:
-                logger.warning(f"记录任务日志失败: {e}")
 
         # 根据级别记录到日志系统
         if level == "error":
@@ -161,6 +281,10 @@ class RegistrationEngine:
             logger.warning(message)
         else:
             logger.info(message)
+
+    def get_logs_text(self) -> str:
+        """获取所有日志的文本（用于一次性写入数据库）"""
+        return "\n".join(self.logs)
 
     def _generate_password(self, length: int = DEFAULT_PASSWORD_LENGTH) -> str:
         """生成随机密码"""
@@ -518,33 +642,24 @@ class RegistrationEngine:
                 self._log("未能获取到授权 Cookie", "error")
                 return None
 
-            # 解码 JWT
-            import base64
-            import json as json_module
-
             try:
-                segments = auth_cookie.split(".")
-                if len(segments) < 1:
-                    self._log("授权 Cookie 格式错误", "error")
-                    return None
-
-                # 解码第一个 segment
-                payload = segments[0]
-                pad = "=" * ((4 - (len(payload) % 4)) % 4)
-                decoded = base64.urlsafe_b64decode((payload + pad).encode("ascii"))
-                auth_json = json_module.loads(decoded.decode("utf-8"))
-
-                workspaces = auth_json.get("workspaces") or []
-                if not workspaces:
-                    self._log("授权 Cookie 里没有 workspace 信息", "error")
-                    return None
-
-                workspace_id = str((workspaces[0] or {}).get("id") or "").strip()
+                workspace_id, source, path = _extract_workspace_id_from_auth_cookie(auth_cookie)
                 if not workspace_id:
-                    self._log("无法解析 workspace_id", "error")
+                    payloads = _decode_auth_cookie_payloads(auth_cookie)
+                    if payloads:
+                        payload_summary = "; ".join(
+                            f"{label}: {', '.join(sorted(payload.keys())[:8])}"
+                            for label, payload in payloads
+                        )
+                        self._log(
+                            f"授权 Cookie 里没有可用 workspace 信息，已解析 payload: {payload_summary}",
+                            "error",
+                        )
+                    else:
+                        self._log("授权 Cookie 无法解码为 JSON payload", "error")
                     return None
 
-                self._log(f"Workspace ID: {workspace_id}")
+                self._log(f"Workspace ID: {workspace_id} (来源: {source} -> {path})")
                 return workspace_id
 
             except Exception as e:

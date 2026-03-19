@@ -55,6 +55,7 @@ class Sub2ApiUploadRequest(BaseModel):
     service_id: Optional[int] = None
     concurrency: int = 3
     priority: int = 50
+    group_id: Optional[str] = None
 
 
 def _to_response(svc) -> Sub2ApiServiceResponse:
@@ -203,5 +204,6 @@ async def upload_accounts_to_sub2api(request: Sub2ApiUploadRequest):
         api_key,
         concurrency=request.concurrency,
         priority=request.priority,
+        group_id=request.group_id,
     )
     return results

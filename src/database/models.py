@@ -227,3 +227,78 @@ class Proxy(Base):
             auth = f"{self.username}:{self.password}@"
 
         return f"{scheme}://{auth}{self.host}:{self.port}"
+
+
+class ScheduledTask(Base):
+    """定时任务表"""
+    __tablename__ = 'scheduled_tasks'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False)  # 任务名称
+    hour = Column(Integer, nullable=False, default=3)  # 执行时（0-23）
+    minute = Column(Integer, nullable=False, default=0)  # 执行分（0-59）
+    email_service_type = Column(String(50), nullable=False, default='tempmail')
+    email_service_id = Column(Integer)  # 指定邮箱服务 ID（可选）
+    count = Column(Integer, nullable=False, default=10)  # 注册数量
+    concurrency = Column(Integer, nullable=False, default=5)  # 并发数
+    mode = Column(String(20), nullable=False, default='pipeline')  # parallel / pipeline
+    interval_min = Column(Integer, default=5)
+    interval_max = Column(Integer, default=30)
+    proxy = Column(String(255))  # 代理设置
+    auto_upload_cpa = Column(Boolean, default=False)
+    cpa_service_ids = Column(JSONEncodedDict)  # JSON list
+    auto_upload_sub2api = Column(Boolean, default=False)
+    sub2api_service_ids = Column(JSONEncodedDict)  # JSON list
+    sub2api_group_id = Column(String(255))  # Sub2API 分组 ID
+    auto_upload_tm = Column(Boolean, default=False)
+    tm_service_ids = Column(JSONEncodedDict)  # JSON list
+    enabled = Column(Boolean, default=True)
+    last_run_at = Column(DateTime)
+    next_run_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'hour': self.hour,
+            'minute': self.minute,
+            'email_service_type': self.email_service_type,
+            'email_service_id': self.email_service_id,
+            'count': self.count,
+            'concurrency': self.concurrency,
+            'mode': self.mode,
+            'interval_min': self.interval_min,
+            'interval_max': self.interval_max,
+            'proxy': self.proxy,
+            'auto_upload_cpa': self.auto_upload_cpa,
+            'cpa_service_ids': self.cpa_service_ids or [],
+            'auto_upload_sub2api': self.auto_upload_sub2api,
+            'sub2api_service_ids': self.sub2api_service_ids or [],
+            'sub2api_group_id': self.sub2api_group_id,
+            'auto_upload_tm': self.auto_upload_tm,
+            'tm_service_ids': self.tm_service_ids or [],
+            'enabled': self.enabled,
+            'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
+            'next_run_at': self.next_run_at.isoformat() if self.next_run_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ScheduledTaskHistory(Base):
+    """定时任务执行历史"""
+    __tablename__ = 'scheduled_task_history'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scheduled_task_id = Column(Integer, ForeignKey('scheduled_tasks.id'), nullable=False, index=True)
+    batch_id = Column(String(36))  # 关联的批量注册 batch_id
+    status = Column(String(20), default='running')  # running, completed, failed
+    total = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+
+    scheduled_task = relationship('ScheduledTask')

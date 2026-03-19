@@ -167,11 +167,19 @@ def create_app() -> FastAPI:
         """支付页面"""
         return templates.TemplateResponse("payment.html", {"request": request})
 
+    @app.get("/scheduler", response_class=HTMLResponse)
+    async def scheduler_page(request: Request):
+        """定时任务页面"""
+        if not _is_authenticated(request):
+            return _redirect_to_login(request)
+        return templates.TemplateResponse("scheduler.html", {"request": request})
+
     @app.on_event("startup")
     async def startup_event():
         """应用启动事件"""
         import asyncio
         from ..database.init_db import initialize_database
+        from .scheduler import start_scheduler
 
         # 确保数据库已初始化（reload 模式下子进程也需要初始化）
         try:
@@ -183,6 +191,13 @@ def create_app() -> FastAPI:
         loop = asyncio.get_event_loop()
         task_manager.set_loop(loop)
 
+        # 启动定时任务调度器
+        try:
+            start_scheduler()
+            logger.info("定时任务调度器已启动")
+        except Exception as e:
+            logger.error(f"调度器启动失败: {e}")
+
         logger.info("=" * 50)
         logger.info(f"{settings.app_name} v{settings.app_version} 启动中...")
         logger.info(f"调试模式: {settings.debug}")
@@ -192,6 +207,11 @@ def create_app() -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown_event():
         """应用关闭事件"""
+        from .scheduler import stop_scheduler
+        try:
+            stop_scheduler()
+        except Exception as e:
+            logger.error(f"调度器关闭失败: {e}")
         logger.info("应用关闭")
 
     return app

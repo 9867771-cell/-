@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc, func
 
-from .models import Account, EmailService, RegistrationTask, Setting, Proxy, CpaService, Sub2ApiService
+from .models import Account, EmailService, RegistrationTask, Setting, Proxy, CpaService, Sub2ApiService, ScheduledTask, ScheduledTaskHistory
 
 
 # ============================================================================
@@ -258,6 +258,25 @@ def create_registration_task(
     db.commit()
     db.refresh(db_task)
     return db_task
+
+
+def bulk_create_registration_tasks(
+    db: Session,
+    task_uuids: List[str],
+    proxy: Optional[str] = None,
+    batch_size: int = 500
+) -> int:
+    """批量创建注册任务（高性能，不逐条 commit）"""
+    total = len(task_uuids)
+    for i in range(0, total, batch_size):
+        batch = task_uuids[i:i + batch_size]
+        objects = [
+            RegistrationTask(task_uuid=uid, proxy=proxy, status='pending')
+            for uid in batch
+        ]
+        db.bulk_save_objects(objects)
+        db.commit()
+    return total
 
 
 def get_registration_task_by_uuid(db: Session, task_uuid: str) -> Optional[RegistrationTask]:
@@ -712,3 +731,92 @@ def delete_tm_service(db: Session, service_id: int) -> bool:
     db.delete(svc)
     db.commit()
     return True
+
+
+# ============================================================================
+# 定时任务 CRUD
+# ============================================================================
+
+def create_scheduled_task(db: Session, **kwargs) -> ScheduledTask:
+    """创建定时任务"""
+    task = ScheduledTask(**kwargs)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def get_scheduled_tasks(db: Session, enabled_only: bool = False) -> List[ScheduledTask]:
+    """获取定时任务列表"""
+    q = db.query(ScheduledTask)
+    if enabled_only:
+        q = q.filter(ScheduledTask.enabled == True)
+    return q.order_by(desc(ScheduledTask.created_at)).all()
+
+
+def get_scheduled_task_by_id(db: Session, task_id: int) -> Optional[ScheduledTask]:
+    """根据 ID 获取定时任务"""
+    return db.query(ScheduledTask).filter(ScheduledTask.id == task_id).first()
+
+
+def update_scheduled_task(db: Session, task_id: int, **kwargs) -> Optional[ScheduledTask]:
+    """更新定时任务"""
+    task = get_scheduled_task_by_id(db, task_id)
+    if not task:
+        return None
+    for k, v in kwargs.items():
+        setattr(task, k, v)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def delete_scheduled_task(db: Session, task_id: int) -> bool:
+    """删除定时任务"""
+    task = get_scheduled_task_by_id(db, task_id)
+    if not task:
+        return False
+    # 同时删除执行历史
+    db.query(ScheduledTaskHistory).filter(ScheduledTaskHistory.scheduled_task_id == task_id).delete()
+    db.delete(task)
+    db.commit()
+    return True
+
+
+# ============================================================================
+# 定时任务执行历史 CRUD
+# ============================================================================
+
+def create_scheduled_task_history(db: Session, **kwargs) -> ScheduledTaskHistory:
+    """创建执行历史记录"""
+    history = ScheduledTaskHistory(**kwargs)
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+    return history
+
+
+def get_scheduled_task_history(db: Session, task_id: int, limit: int = 50) -> List[ScheduledTaskHistory]:
+    """获取指定定时任务的执行历史"""
+    return db.query(ScheduledTaskHistory).filter(
+        ScheduledTaskHistory.scheduled_task_id == task_id
+    ).order_by(desc(ScheduledTaskHistory.started_at)).limit(limit).all()
+
+
+def get_all_scheduled_task_history(db: Session, limit: int = 100) -> List[ScheduledTaskHistory]:
+    """获取所有执行历史"""
+    return db.query(ScheduledTaskHistory).order_by(
+        desc(ScheduledTaskHistory.started_at)
+    ).limit(limit).all()
+
+
+def update_scheduled_task_history(db: Session, history_id: int, **kwargs) -> Optional[ScheduledTaskHistory]:
+    """更新执行历史记录"""
+    history = db.query(ScheduledTaskHistory).filter(ScheduledTaskHistory.id == history_id).first()
+    if not history:
+        return None
+    for k, v in kwargs.items():
+        setattr(history, k, v)
+    db.commit()
+    db.refresh(history)
+    return history

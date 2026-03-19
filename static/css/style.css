@@ -3,6 +3,22 @@
  * 现代化、响应式设计，支持暗色模式
  */
 
+/* SVG 图标 */
+.icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+.icon-sm { width: 0.875em; height: 0.875em; }
+.icon-lg { width: 1.25em; height: 1.25em; }
+
 /* CSS 变量 - 亮色主题 */
 :root {
     /* 主色调 */

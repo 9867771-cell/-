@@ -1000,8 +1000,9 @@ function selectSub2ApiService() {
                 item.addEventListener('mouseenter', () => item.style.background = 'var(--surface-hover)');
                 item.addEventListener('mouseleave', () => item.style.background = '');
                 item.addEventListener('click', () => {
+                    const groupId = (document.getElementById('sub2api-upload-group-id') || {}).value || null;
                     cleanup();
-                    resolve({ service_id: parseInt(item.dataset.id) });
+                    resolve({ service_id: parseInt(item.dataset.id), group_id: groupId });
                 });
             });
         }
@@ -1013,7 +1014,7 @@ function selectSub2ApiService() {
             autoBtn.removeEventListener('click', onAuto);
         }
         function onCancel() { cleanup(); resolve(null); }
-        function onAuto() { cleanup(); resolve({ service_id: null }); }
+        function onAuto() { cleanup(); const groupId = (document.getElementById('sub2api-upload-group-id') || {}).value || null; resolve({ service_id: null, group_id: groupId }); }
 
         closeBtn.addEventListener('click', onCancel);
         cancelBtn.addEventListener('click', onCancel);
@@ -1038,6 +1039,7 @@ async function handleBatchUploadSub2Api() {
     try {
         const payload = buildBatchPayload();
         if (choice.service_id != null) payload.service_id = choice.service_id;
+        if (choice.group_id) payload.group_id = choice.group_id;
         const result = await api.post('/accounts/batch-upload-sub2api', payload);
 
         let message = `成功: ${result.success_count}`;
@@ -1063,6 +1065,7 @@ async function uploadToSub2Api(id) {
         toast.info('正在上传到 Sub2API...');
         const payload = {};
         if (choice.service_id != null) payload.service_id = choice.service_id;
+        if (choice.group_id) payload.group_id = choice.group_id;
         const result = await api.post(`/accounts/${id}/upload-sub2api`, payload);
         if (result.success) {
             toast.success('上传成功');

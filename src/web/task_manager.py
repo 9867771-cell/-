@@ -13,8 +13,10 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# 全局线程池（支持最多 50 个并发注册任务）
-_executor = ThreadPoolExecutor(max_workers=50, thread_name_prefix="reg_worker")
+# 全局线程池（支持最多 200 个并发注册任务，可通过环境变量 REG_MAX_WORKERS 调整）
+import os
+_max_workers = int(os.environ.get("REG_MAX_WORKERS", "200"))
+_executor = ThreadPoolExecutor(max_workers=_max_workers, thread_name_prefix="reg_worker")
 
 # 全局元锁：保护所有 defaultdict 的首次 key 创建（避免多线程竞态）
 _meta_lock = threading.Lock()
@@ -364,6 +366,29 @@ class TaskManager:
             if key in _ws_sent_index:
                 _ws_sent_index[key].pop(id(websocket), None)
         logger.info(f"批量任务 WebSocket 连接已注销: {batch_id}")
+
+    def cleanup_finished_tasks(self, task_uuids: List[str]):
+        """清理已完成任务的内存数据，防止大批量任务导致内存泄漏"""
+        for task_uuid in task_uuids:
+            with _meta_lock:
+                _log_queues.pop(task_uuid, None)
+                _log_locks.pop(task_uuid, None)
+                _task_status.pop(task_uuid, None)
+                _task_cancelled.pop(task_uuid, None)
+                if task_uuid in _ws_sent_index:
+                    del _ws_sent_index[task_uuid]
+                if task_uuid in _ws_connections:
+                    del _ws_connections[task_uuid]
+
+    def cleanup_finished_batch(self, batch_id: str):
+        """清理已完成批量任务的内存数据"""
+        with _meta_lock:
+            _batch_status.pop(batch_id, None)
+            _batch_logs.pop(batch_id, None)
+            _batch_locks.pop(batch_id, None)
+            key = f"batch_{batch_id}"
+            _ws_sent_index.pop(key, None)
+            _ws_connections.pop(key, None)
 
     def create_log_callback(self, task_uuid: str, prefix: str = "", batch_id: str = "") -> Callable[[str], None]:
         """创建日志回调函数，可附加任务编号前缀，并同时推送到批量任务频道"""

@@ -7,7 +7,7 @@ import logging
 import uuid
 import random
 from datetime import datetime
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Any
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -27,6 +27,7 @@ router = APIRouter()
 running_tasks: dict = {}
 # 批量任务存储
 batch_tasks: Dict[str, dict] = {}
+BATCH_CLEANUP_DELAY_SECONDS = 60
 
 
 # ============== Proxy Helper Functions ==============
@@ -72,11 +73,12 @@ class RegistrationTaskCreate(BaseModel):
     email_service_config: Optional[dict] = None
     email_service_id: Optional[int] = None
     auto_upload_cpa: bool = False
-    cpa_service_ids: List[int] = []  # 指定 CPA 服务 ID 列表，空则取第一个启用的
+    cpa_service_ids: List[int] = []
     auto_upload_sub2api: bool = False
-    sub2api_service_ids: List[int] = []  # 指定 Sub2API 服务 ID 列表
+    sub2api_service_ids: List[int] = []
+    sub2api_group_id: Optional[str] = None
     auto_upload_tm: bool = False
-    tm_service_ids: List[int] = []  # 指定 TM 服务 ID 列表
+    tm_service_ids: List[int] = []
 
 
 class BatchRegistrationRequest(BaseModel):
@@ -94,6 +96,7 @@ class BatchRegistrationRequest(BaseModel):
     cpa_service_ids: List[int] = []
     auto_upload_sub2api: bool = False
     sub2api_service_ids: List[int] = []
+    sub2api_group_id: Optional[str] = None
     auto_upload_tm: bool = False
     tm_service_ids: List[int] = []
 
@@ -162,6 +165,7 @@ class OutlookBatchRegistrationRequest(BaseModel):
     cpa_service_ids: List[int] = []
     auto_upload_sub2api: bool = False
     sub2api_service_ids: List[int] = []
+    sub2api_group_id: Optional[str] = None
     auto_upload_tm: bool = False
     tm_service_ids: List[int] = []
 
@@ -221,7 +225,7 @@ def _normalize_email_service_config(
     return normalized
 
 
-def _run_sync_registration_task(task_uuid: str, email_service_type: str, proxy: Optional[str], email_service_config: Optional[dict], email_service_id: Optional[int] = None, log_prefix: str = "", batch_id: str = "", auto_upload_cpa: bool = False, cpa_service_ids: List[int] = None, auto_upload_sub2api: bool = False, sub2api_service_ids: List[int] = None, auto_upload_tm: bool = False, tm_service_ids: List[int] = None):
+def _run_sync_registration_task(task_uuid: str, email_service_type: str, proxy: Optional[str], email_service_config: Optional[dict], email_service_id: Optional[int] = None, log_prefix: str = "", batch_id: str = "", auto_upload_cpa: bool = False, cpa_service_ids: List[int] = None, auto_upload_sub2api: bool = False, sub2api_service_ids: List[int] = None, sub2api_group_id: Optional[str] = None, auto_upload_tm: bool = False, tm_service_ids: List[int] = None):
     """
     在线程池中执行的同步注册任务
 
@@ -448,7 +452,7 @@ def _run_sync_registration_task(task_uuid: str, email_service_type: str, proxy: 
                                     if not _svc:
                                         continue
                                     log_callback(f"[Sub2API] 上传到服务: {_svc.name}")
-                                    _ok, _msg = upload_to_sub2api([saved_account], _svc.api_url, _svc.api_key)
+                                    _ok, _msg = upload_to_sub2api([saved_account], _svc.api_url, _svc.api_key, group_id=sub2api_group_id)
                                     log_callback(f"[Sub2API] {'成功' if _ok else '失败'}({_svc.name}): {_msg}")
                                 except Exception as _e:
                                     log_callback(f"[Sub2API] 异常({_sid}): {_e}")
@@ -485,7 +489,8 @@ def _run_sync_registration_task(task_uuid: str, email_service_type: str, proxy: 
                     db, task_uuid,
                     status="completed",
                     completed_at=datetime.utcnow(),
-                    result=result.to_dict()
+                    result=result.to_dict(),
+                    logs=engine.get_logs_text()
                 )
 
                 # 更新 TaskManager 状态
@@ -498,7 +503,8 @@ def _run_sync_registration_task(task_uuid: str, email_service_type: str, proxy: 
                     db, task_uuid,
                     status="failed",
                     completed_at=datetime.utcnow(),
-                    error_message=result.error_message
+                    error_message=result.error_message,
+                    logs=engine.get_logs_text()
                 )
 
                 # 更新 TaskManager 状态
@@ -524,7 +530,7 @@ def _run_sync_registration_task(task_uuid: str, email_service_type: str, proxy: 
                 pass
 
 
-async def run_registration_task(task_uuid: str, email_service_type: str, proxy: Optional[str], email_service_config: Optional[dict], email_service_id: Optional[int] = None, log_prefix: str = "", batch_id: str = "", auto_upload_cpa: bool = False, cpa_service_ids: List[int] = None, auto_upload_sub2api: bool = False, sub2api_service_ids: List[int] = None, auto_upload_tm: bool = False, tm_service_ids: List[int] = None):
+async def run_registration_task(task_uuid: str, email_service_type: str, proxy: Optional[str], email_service_config: Optional[dict], email_service_id: Optional[int] = None, log_prefix: str = "", batch_id: str = "", auto_upload_cpa: bool = False, cpa_service_ids: List[int] = None, auto_upload_sub2api: bool = False, sub2api_service_ids: List[int] = None, sub2api_group_id: Optional[str] = None, auto_upload_tm: bool = False, tm_service_ids: List[int] = None):
     """
     异步执行注册任务
 
@@ -555,6 +561,7 @@ async def run_registration_task(task_uuid: str, email_service_type: str, proxy: 
             cpa_service_ids or [],
             auto_upload_sub2api,
             sub2api_service_ids or [],
+            sub2api_group_id,
             auto_upload_tm,
             tm_service_ids or [],
         )
@@ -576,7 +583,8 @@ def _init_batch_state(batch_id: str, task_uuids: List[str]):
         "task_uuids": task_uuids,
         "current_index": 0,
         "logs": [],
-        "finished": False
+        "finished": False,
+        "status": "running",
     }
 
 
@@ -595,6 +603,41 @@ def _make_batch_helpers(batch_id: str):
     return add_batch_log, update_batch_status
 
 
+def _snapshot_batch_state(batch_id: str) -> Dict[str, Any]:
+    """读取当前批量任务的汇总信息，供调度器和测试使用。"""
+    batch = batch_tasks.get(batch_id, {})
+    return {
+        "status": batch.get("status", "unknown"),
+        "total": batch.get("total", 0),
+        "completed": batch.get("completed", 0),
+        "success": batch.get("success", 0),
+        "failed": batch.get("failed", 0),
+        "cancelled": batch.get("cancelled", False),
+        "finished": batch.get("finished", False),
+    }
+
+
+async def _cleanup_batch_state_later(
+    batch_id: str,
+    task_uuids: List[str],
+    delay_seconds: int = BATCH_CLEANUP_DELAY_SECONDS,
+):
+    """延迟清理批量任务的内存状态，给前端预留读取最终日志的窗口。"""
+    await asyncio.sleep(delay_seconds)
+    task_manager.cleanup_finished_tasks(task_uuids)
+    task_manager.cleanup_finished_batch(batch_id)
+    batch_tasks.pop(batch_id, None)
+
+
+def _queue_batch_cleanup(
+    batch_id: str,
+    task_uuids: List[str],
+    delay_seconds: int = BATCH_CLEANUP_DELAY_SECONDS,
+):
+    """后台安排批量任务清理，不阻塞调用方返回。"""
+    asyncio.create_task(_cleanup_batch_state_later(batch_id, task_uuids, delay_seconds))
+
+
 async def run_batch_parallel(
     batch_id: str,
     task_uuids: List[str],
@@ -607,9 +650,10 @@ async def run_batch_parallel(
     cpa_service_ids: List[int] = None,
     auto_upload_sub2api: bool = False,
     sub2api_service_ids: List[int] = None,
+    sub2api_group_id: Optional[str] = None,
     auto_upload_tm: bool = False,
     tm_service_ids: List[int] = None,
-):
+) -> Dict[str, Any]:
     """
     并行模式：所有任务同时提交，Semaphore 控制最大并发数
     """
@@ -617,6 +661,7 @@ async def run_batch_parallel(
     add_batch_log, update_batch_status = _make_batch_helpers(batch_id)
     semaphore = asyncio.Semaphore(concurrency)
     counter_lock = asyncio.Lock()
+    summary: Dict[str, Any] = {}
     add_batch_log(f"[系统] 并行模式启动，并发数: {concurrency}，总任务: {len(task_uuids)}")
 
     async def _run_one(idx: int, uuid: str):
@@ -627,6 +672,7 @@ async def run_batch_parallel(
                 log_prefix=prefix, batch_id=batch_id,
                 auto_upload_cpa=auto_upload_cpa, cpa_service_ids=cpa_service_ids or [],
                 auto_upload_sub2api=auto_upload_sub2api, sub2api_service_ids=sub2api_service_ids or [],
+                sub2api_group_id=sub2api_group_id,
                 auto_upload_tm=auto_upload_tm, tm_service_ids=tm_service_ids or [],
             )
         with get_db() as db:
@@ -657,6 +703,10 @@ async def run_batch_parallel(
         update_batch_status(finished=True, status="failed")
     finally:
         batch_tasks[batch_id]["finished"] = True
+        summary = _snapshot_batch_state(batch_id)
+        _queue_batch_cleanup(batch_id, task_uuids)
+
+    return summary
 
 
 async def run_batch_pipeline(
@@ -673,9 +723,10 @@ async def run_batch_pipeline(
     cpa_service_ids: List[int] = None,
     auto_upload_sub2api: bool = False,
     sub2api_service_ids: List[int] = None,
+    sub2api_group_id: Optional[str] = None,
     auto_upload_tm: bool = False,
     tm_service_ids: List[int] = None,
-):
+) -> Dict[str, Any]:
     """
     流水线模式：每隔 interval 秒启动一个新任务，Semaphore 限制最大并发数
     """
@@ -684,6 +735,7 @@ async def run_batch_pipeline(
     semaphore = asyncio.Semaphore(concurrency)
     counter_lock = asyncio.Lock()
     running_tasks_list = []
+    summary: Dict[str, Any] = {}
     add_batch_log(f"[系统] 流水线模式启动，并发数: {concurrency}，总任务: {len(task_uuids)}")
 
     async def _run_and_release(idx: int, uuid: str, pfx: str):
@@ -693,6 +745,7 @@ async def run_batch_pipeline(
                 log_prefix=pfx, batch_id=batch_id,
                 auto_upload_cpa=auto_upload_cpa, cpa_service_ids=cpa_service_ids or [],
                 auto_upload_sub2api=auto_upload_sub2api, sub2api_service_ids=sub2api_service_ids or [],
+                sub2api_group_id=sub2api_group_id,
                 auto_upload_tm=auto_upload_tm, tm_service_ids=tm_service_ids or [],
             )
             with get_db() as db:
@@ -746,6 +799,10 @@ async def run_batch_pipeline(
         update_batch_status(finished=True, status="failed")
     finally:
         batch_tasks[batch_id]["finished"] = True
+        summary = _snapshot_batch_state(batch_id)
+        _queue_batch_cleanup(batch_id, task_uuids)
+
+    return summary
 
 
 async def run_batch_registration(
@@ -763,27 +820,30 @@ async def run_batch_registration(
     cpa_service_ids: List[int] = None,
     auto_upload_sub2api: bool = False,
     sub2api_service_ids: List[int] = None,
+    sub2api_group_id: Optional[str] = None,
     auto_upload_tm: bool = False,
     tm_service_ids: List[int] = None,
-):
+) -> Dict[str, Any]:
     """根据 mode 分发到并行或流水线执行"""
     if mode == "parallel":
-        await run_batch_parallel(
+        return await run_batch_parallel(
             batch_id, task_uuids, email_service_type, proxy,
             email_service_config, email_service_id, concurrency,
             auto_upload_cpa=auto_upload_cpa, cpa_service_ids=cpa_service_ids,
             auto_upload_sub2api=auto_upload_sub2api, sub2api_service_ids=sub2api_service_ids,
+            sub2api_group_id=sub2api_group_id,
             auto_upload_tm=auto_upload_tm, tm_service_ids=tm_service_ids,
         )
-    else:
-        await run_batch_pipeline(
-            batch_id, task_uuids, email_service_type, proxy,
-            email_service_config, email_service_id,
-            interval_min, interval_max, concurrency,
-            auto_upload_cpa=auto_upload_cpa, cpa_service_ids=cpa_service_ids,
-            auto_upload_sub2api=auto_upload_sub2api, sub2api_service_ids=sub2api_service_ids,
-            auto_upload_tm=auto_upload_tm, tm_service_ids=tm_service_ids,
-        )
+
+    return await run_batch_pipeline(
+        batch_id, task_uuids, email_service_type, proxy,
+        email_service_config, email_service_id,
+        interval_min, interval_max, concurrency,
+        auto_upload_cpa=auto_upload_cpa, cpa_service_ids=cpa_service_ids,
+        auto_upload_sub2api=auto_upload_sub2api, sub2api_service_ids=sub2api_service_ids,
+        sub2api_group_id=sub2api_group_id,
+        auto_upload_tm=auto_upload_tm, tm_service_ids=tm_service_ids,
+    )
 
 
 # ============== API Endpoints ==============
@@ -833,6 +893,7 @@ async def start_registration(
         request.cpa_service_ids,
         request.auto_upload_sub2api,
         request.sub2api_service_ids,
+        request.sub2api_group_id,
         request.auto_upload_tm,
         request.tm_service_ids,
     )
@@ -848,15 +909,15 @@ async def start_batch_registration(
     """
     启动批量注册任务
 
-    - count: 注册数量 (1-100)
+    - count: 注册数量 (1-50000)
     - email_service_type: 邮箱服务类型
     - proxy: 代理地址
     - interval_min: 最小间隔秒数
     - interval_max: 最大间隔秒数
     """
     # 验证参数
-    if request.count < 1 or request.count > 100:
-        raise HTTPException(status_code=400, detail="注册数量必须在 1-100 之间")
+    if request.count < 1 or request.count > 50000:
+        raise HTTPException(status_code=400, detail="注册数量必须在 1-50000 之间")
 
     try:
         EmailServiceType(request.email_service_type)
@@ -869,29 +930,18 @@ async def start_batch_registration(
     if request.interval_min < 0 or request.interval_max < request.interval_min:
         raise HTTPException(status_code=400, detail="间隔时间参数无效")
 
-    if not 1 <= request.concurrency <= 50:
-        raise HTTPException(status_code=400, detail="并发数必须在 1-50 之间")
+    if not 1 <= request.concurrency <= 500:
+        raise HTTPException(status_code=400, detail="并发数必须在 1-500 之间")
 
     if request.mode not in ("parallel", "pipeline"):
         raise HTTPException(status_code=400, detail="模式必须为 parallel 或 pipeline")
 
-    # 创建批量任务
+    # 创建批量任务 — 使用批量插入
     batch_id = str(uuid.uuid4())
-    task_uuids = []
+    task_uuids = [str(uuid.uuid4()) for _ in range(request.count)]
 
     with get_db() as db:
-        for _ in range(request.count):
-            task_uuid = str(uuid.uuid4())
-            task = crud.create_registration_task(
-                db,
-                task_uuid=task_uuid,
-                proxy=request.proxy
-            )
-            task_uuids.append(task_uuid)
-
-    # 获取所有任务
-    with get_db() as db:
-        tasks = [crud.get_registration_task(db, uuid) for uuid in task_uuids]
+        crud.bulk_create_registration_tasks(db, task_uuids, proxy=request.proxy)
 
     # 在后台运行批量注册
     background_tasks.add_task(
@@ -910,14 +960,16 @@ async def start_batch_registration(
         request.cpa_service_ids,
         request.auto_upload_sub2api,
         request.sub2api_service_ids,
+        request.sub2api_group_id,
         request.auto_upload_tm,
         request.tm_service_ids,
     )
 
+    # 精简响应：不再返回所有 task 对象，避免万级序列化
     return BatchRegistrationResponse(
         batch_id=batch_id,
         count=request.count,
-        tasks=[task_to_response(t) for t in tasks if t]
+        tasks=[]
     )
 
 
@@ -1290,6 +1342,7 @@ async def run_outlook_batch_registration(
     cpa_service_ids: List[int] = None,
     auto_upload_sub2api: bool = False,
     sub2api_service_ids: List[int] = None,
+    sub2api_group_id: Optional[str] = None,
     auto_upload_tm: bool = False,
     tm_service_ids: List[int] = None,
 ):
@@ -1333,6 +1386,7 @@ async def run_outlook_batch_registration(
         cpa_service_ids=cpa_service_ids,
         auto_upload_sub2api=auto_upload_sub2api,
         sub2api_service_ids=sub2api_service_ids,
+        sub2api_group_id=sub2api_group_id,
         auto_upload_tm=auto_upload_tm,
         tm_service_ids=tm_service_ids,
     )
@@ -1437,6 +1491,7 @@ async def start_outlook_batch_registration(
         request.cpa_service_ids,
         request.auto_upload_sub2api,
         request.sub2api_service_ids,
+        request.sub2api_group_id,
         request.auto_upload_tm,
         request.tm_service_ids,
     )

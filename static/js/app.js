@@ -91,6 +91,7 @@ const elements = {
     autoUploadSub2api: document.getElementById('auto-upload-sub2api'),
     sub2apiServiceSelectGroup: document.getElementById('sub2api-service-select-group'),
     sub2apiServiceSelect: document.getElementById('sub2api-service-select'),
+    sub2apiGroupId: document.getElementById('sub2api-group-id'),
     autoUploadTm: document.getElementById('auto-upload-tm'),
     tmServiceSelectGroup: document.getElementById('tm-service-select-group'),
     tmServiceSelect: document.getElementById('tm-service-select'),
@@ -478,6 +479,7 @@ async function handleStartRegistration(e) {
         cpa_service_ids: elements.autoUploadCpa && elements.autoUploadCpa.checked ? getSelectedServiceIds(elements.cpaServiceSelect) : [],
         auto_upload_sub2api: elements.autoUploadSub2api ? elements.autoUploadSub2api.checked : false,
         sub2api_service_ids: elements.autoUploadSub2api && elements.autoUploadSub2api.checked ? getSelectedServiceIds(elements.sub2apiServiceSelect) : [],
+        sub2api_group_id: elements.autoUploadSub2api && elements.autoUploadSub2api.checked && elements.sub2apiGroupId ? (elements.sub2apiGroupId.value || null) : null,
         auto_upload_tm: elements.autoUploadTm ? elements.autoUploadTm.checked : false,
         tm_service_ids: elements.autoUploadTm && elements.autoUploadTm.checked ? getSelectedServiceIds(elements.tmServiceSelect) : [],
     };
@@ -1188,6 +1190,7 @@ async function handleOutlookBatchRegistration() {
         cpa_service_ids: elements.autoUploadCpa && elements.autoUploadCpa.checked ? getSelectedServiceIds(elements.cpaServiceSelect) : [],
         auto_upload_sub2api: elements.autoUploadSub2api ? elements.autoUploadSub2api.checked : false,
         sub2api_service_ids: elements.autoUploadSub2api && elements.autoUploadSub2api.checked ? getSelectedServiceIds(elements.sub2apiServiceSelect) : [],
+        sub2api_group_id: elements.autoUploadSub2api && elements.autoUploadSub2api.checked && elements.sub2apiGroupId ? (elements.sub2apiGroupId.value || null) : null,
         auto_upload_tm: elements.autoUploadTm ? elements.autoUploadTm.checked : false,
         tm_service_ids: elements.autoUploadTm && elements.autoUploadTm.checked ? getSelectedServiceIds(elements.tmServiceSelect) : [],
     };

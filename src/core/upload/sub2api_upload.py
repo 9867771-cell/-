@@ -16,12 +16,86 @@ from ...database.models import Account
 logger = logging.getLogger(__name__)
 
 
+def _bind_accounts_to_group(
+    account_emails: List[str],
+    api_url: str,
+    api_key: str,
+    group_id: int,
+) -> int:
+    """
+    导入后将账号绑定到指定分组。
+    通过搜索账号名(email)获取 ID，再 PUT 更新 group_ids。
+    """
+    base = api_url.rstrip("/")
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+    }
+    bound = 0
+    for email in account_emails:
+        try:
+            # 1) 搜索刚导入的账号
+            resp = cffi_requests.get(
+                f"{base}/api/v1/admin/accounts",
+                params={"search": email, "platform": "openai", "page": 1, "page_size": 5},
+                headers=headers,
+                proxies=None,
+                timeout=15,
+                impersonate="chrome110",
+            )
+            if resp.status_code != 200:
+                logger.warning(f"Sub2API 搜索账号失败: {email}, HTTP {resp.status_code}")
+                continue
+
+            body = resp.json()
+            # 兼容多种分页响应格式
+            items = []
+            if isinstance(body, dict):
+                d = body.get("data", body)
+                if isinstance(d, list):
+                    items = d
+                elif isinstance(d, dict):
+                    items = d.get("items", d.get("data", []))
+
+            account_id = None
+            for item in items:
+                if isinstance(item, dict) and item.get("name") == email:
+                    account_id = item.get("id")
+                    break
+
+            if not account_id:
+                logger.warning(f"Sub2API 未找到刚导入的账号: {email}")
+                continue
+
+            # 2) 更新账号的 group_ids
+            resp2 = cffi_requests.put(
+                f"{base}/api/v1/admin/accounts/{account_id}",
+                json={"group_ids": [group_id]},
+                headers=headers,
+                proxies=None,
+                timeout=15,
+                impersonate="chrome110",
+            )
+            if resp2.status_code == 200:
+                bound += 1
+                logger.info(f"Sub2API 账号 {email} (ID={account_id}) 已绑定到分组 {group_id}")
+            else:
+                logger.warning(
+                    f"Sub2API 绑定分组失败: {email} (ID={account_id}), HTTP {resp2.status_code}"
+                )
+        except Exception as e:
+            logger.error(f"Sub2API 绑定分组异常: {email}, {e}")
+
+    return bound
+
+
 def upload_to_sub2api(
     accounts: List[Account],
     api_url: str,
     api_key: str,
     concurrency: int = 3,
     priority: int = 50,
+    group_id: Optional[str] = None,
 ) -> Tuple[bool, str]:
     """
     上传账号列表到 Sub2API 平台（不走代理）
@@ -87,6 +161,15 @@ def upload_to_sub2api(
     if not account_items:
         return False, "所有账号均缺少 access_token，无法上传"
 
+    # group_id 转为整数
+    _gid = None
+    if group_id:
+        try:
+            _gid = int(group_id)
+        except (ValueError, TypeError):
+            _gid = None
+            logger.warning(f"Sub2API group_id 无法转为整数: {group_id}")
+
     payload = {
         "data": {
             "type": "sub2api-data",
@@ -95,8 +178,11 @@ def upload_to_sub2api(
             "proxies": [],
             "accounts": account_items,
         },
-        "skip_default_group_bind": True,
+        # 指定分组时跳过默认分组绑定，后续通过 PUT 手动绑定
+        "skip_default_group_bind": bool(_gid),
     }
+
+    logger.info(f"Sub2API 上传 payload: accounts={len(account_items)}, group_id={_gid}")
 
     url = api_url.rstrip("/") + "/api/v1/admin/accounts/data"
     headers = {
@@ -115,17 +201,23 @@ def upload_to_sub2api(
             impersonate="chrome110",
         )
 
-        if response.status_code in (200, 201):
-            return True, f"成功上传 {len(account_items)} 个账号"
+        if response.status_code not in (200, 201):
+            error_msg = f"上传失败: HTTP {response.status_code}"
+            try:
+                detail = response.json()
+                if isinstance(detail, dict):
+                    error_msg = detail.get("message", error_msg)
+            except Exception:
+                error_msg = f"{error_msg} - {response.text[:200]}"
+            return False, error_msg
 
-        error_msg = f"上传失败: HTTP {response.status_code}"
-        try:
-            detail = response.json()
-            if isinstance(detail, dict):
-                error_msg = detail.get("message", error_msg)
-        except Exception:
-            error_msg = f"{error_msg} - {response.text[:200]}"
-        return False, error_msg
+        # 导入成功；如果指定了分组，搜索账号并绑定
+        msg = f"成功上传 {len(account_items)} 个账号"
+        if _gid is not None:
+            emails = [item["name"] for item in account_items]
+            bound = _bind_accounts_to_group(emails, api_url, api_key, _gid)
+            msg += f"，{bound}/{len(emails)} 个已绑定到分组 {_gid}"
+        return True, msg
 
     except Exception as e:
         logger.error(f"Sub2API 上传异常: {e}")
@@ -138,6 +230,7 @@ def batch_upload_to_sub2api(
     api_key: str,
     concurrency: int = 3,
     priority: int = 50,
+    group_id: Optional[str] = None,
 ) -> dict:
     """
     批量上传指定 ID 的账号到 Sub2API 平台
@@ -169,7 +262,7 @@ def batch_upload_to_sub2api(
         if not accounts:
             return results
 
-        success, message = upload_to_sub2api(accounts, api_url, api_key, concurrency, priority)
+        success, message = upload_to_sub2api(accounts, api_url, api_key, concurrency, priority, group_id=group_id)
 
         if success:
             for acc in accounts:

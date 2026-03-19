@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>邮箱服务 - OpenAI 注册系统</title>
     <link rel="stylesheet" href="/static/css/style.css?v={{ static_version }}">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📧</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2310a37f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z'/><polyline points='22,6 12,13 2,6'/></svg>">
 </head>
 <body>
     <div class="container">
@@ -19,11 +19,12 @@
                 <a href="/accounts" class="nav-link">账号管理</a>
                 <a href="/email-services" class="nav-link active">邮箱服务</a>
                 <a href="/payment" class="nav-link">支付</a>
+                <a href="/scheduler" class="nav-link">定时任务</a>
                 <a href="/settings" class="nav-link">设置</a>
                 <a href="/logout" class="nav-link">退出</a>
             </div>
             <button class="theme-toggle" onclick="theme.toggle()" title="切换主题">
-                🌙
+                <svg class="icon"><use href="/static/icons.svg#i-moon"/></svg>
             </button>
         </nav>
 
@@ -57,7 +58,7 @@
             <!-- Outlook 管理 -->
             <div class="card">
                 <div class="card-header">
-                    <h3>📥 Outlook 批量导入</h3>
+                    <h3><svg class="icon"><use href="/static/icons.svg#i-download"/></svg> Outlook 批量导入</h3>
                     <button class="btn btn-ghost btn-sm" id="toggle-outlook-import">展开</button>
                 </div>
                 <div class="card-body" id="outlook-import-body" style="display: none;">
@@ -86,7 +87,7 @@
                         </div>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-primary" id="outlook-import-btn">📥 开始导入</button>
+                        <button type="button" class="btn btn-primary" id="outlook-import-btn"><svg class="icon"><use href="/static/icons.svg#i-download"/></svg> 开始导入</button>
                         <button type="button" class="btn btn-secondary" id="clear-import-btn">清空</button>
                     </div>
                     <div id="import-result" style="display: none; margin-top: var(--spacing-md);"></div>
@@ -96,8 +97,8 @@
             <!-- 自定义邮箱管理（含 MoeMail / TempMail / DuckMail） -->
             <div class="card">
                 <div class="card-header">
-                    <h3>🔗 自定义邮箱服务</h3>
-                    <button class="btn btn-primary btn-sm" id="add-custom-btn">➕ 添加服务</button>
+                    <h3><svg class="icon"><use href="/static/icons.svg#i-link"/></svg> 自定义邮箱服务</h3>
+                    <button class="btn btn-primary btn-sm" id="add-custom-btn"><svg class="icon"><use href="/static/icons.svg#i-plus"/></svg> 添加服务</button>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div class="table-container">
@@ -132,8 +133,8 @@
             <!-- Outlook 账户列表 -->
             <div class="card">
                 <div class="card-header">
-                    <h3>📧 Outlook 账户列表</h3>
-                    <button class="btn btn-danger btn-sm" id="batch-delete-outlook-btn" disabled>🗑️ 批量删除</button>
+                    <h3><svg class="icon"><use href="/static/icons.svg#i-mail"/></svg> Outlook 账户列表</h3>
+                    <button class="btn btn-danger btn-sm" id="batch-delete-outlook-btn" disabled><svg class="icon"><use href="/static/icons.svg#i-trash"/></svg> 批量删除</button>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div class="table-container">
@@ -167,7 +168,7 @@
             <!-- 临时邮箱配置 -->
             <div class="card">
                 <div class="card-header">
-                    <h3>🌐 临时邮箱配置</h3>
+                    <h3><svg class="icon"><use href="/static/icons.svg#i-globe"/></svg> 临时邮箱配置</h3>
                 </div>
                 <div class="card-body">
                     <form id="tempmail-form">
@@ -182,8 +183,8 @@
                             </label>
                         </div>
                         <div class="form-actions">
-                            <button type="submit" class="btn btn-primary">💾 保存设置</button>
-                            <button type="button" class="btn btn-secondary" id="test-tempmail-btn">🔌 测试连接</button>
+                            <button type="submit" class="btn btn-primary"><svg class="icon"><use href="/static/icons.svg#i-save"/></svg> 保存设置</button>
+                            <button type="button" class="btn btn-secondary" id="test-tempmail-btn"><svg class="icon"><use href="/static/icons.svg#i-zap"/></svg> 测试连接</button>
                         </div>
                     </form>
                 </div>
@@ -195,7 +196,7 @@
     <div class="modal" id="add-custom-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>➕ 添加自定义邮箱服务</h3>
+                <h3><svg class="icon"><use href="/static/icons.svg#i-plus"/></svg> 添加自定义邮箱服务</h3>
                 <button class="modal-close" id="close-custom-modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -303,7 +304,7 @@
     <div class="modal" id="edit-custom-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>✏️ 编辑自定义邮箱服务</h3>
+                <h3><svg class="icon"><use href="/static/icons.svg#i-pencil"/></svg> 编辑自定义邮箱服务</h3>
                 <button class="modal-close" id="close-edit-custom-modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -411,7 +412,7 @@
     <div class="modal" id="edit-outlook-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>✏️ 编辑 Outlook 账户</h3>
+                <h3><svg class="icon"><use href="/static/icons.svg#i-pencil"/></svg> 编辑 Outlook 账户</h3>
                 <button class="modal-close" id="close-edit-outlook-modal">&times;</button>
             </div>
             <div class="modal-body">
