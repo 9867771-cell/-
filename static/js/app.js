@@ -1505,3 +1505,65 @@ async function restoreActiveTask() {
         }
     }
 }
+
+// ============== 系统状态轮询 ==============
+let _sysStatusTimer = null;
+
+async function fetchSystemStatus() {
+    try {
+        const res = await fetch('/api/system/status');
+        if (!res.ok) return;
+        const d = await res.json();
+
+        // 状态点
+        const dot = document.getElementById('sys-dot');
+        if (dot) { dot.className = 'sys-dot ' + (d.idle ? 'idle' : 'busy'); }
+
+        // 基本信息
+        const el = (id) => document.getElementById(id);
+        if (el('sys-uptime')) el('sys-uptime').textContent = d.uptime || '-';
+        if (el('sys-threads')) el('sys-threads').textContent = `${d.thread_pool?.active_threads || 0}/${d.thread_pool?.max_workers || 0}`;
+        if (el('sys-ws')) el('sys-ws').textContent = d.websocket_connections || 0;
+        if (el('sys-sched')) el('sys-sched').textContent = d.scheduler?.running ? `${d.scheduler.job_count} 任务` : '未启动';
+
+        // 运行中的任务/批量/调度
+        const listEl = document.getElementById('sys-tasks-list');
+        if (!listEl) return;
+        let html = '';
+
+        // 运行中的单任务
+        if (d.running_tasks?.length) {
+            d.running_tasks.forEach(t => {
+                html += `<div class="sys-task-row"><span>🔄 ${t.email || t.task_uuid}</span><span>${t.step || '运行中'}</span></div>`;
+            });
+        }
+        // 运行中的批量任务
+        if (d.running_batches?.length) {
+            d.running_batches.forEach(b => {
+                html += `<div class="sys-task-row"><span>📦 批量 ${b.batch_id}</span><span>${b.completed}/${b.total} (✓${b.success} ✗${b.failed})</span></div>`;
+            });
+        }
+        // 下次调度
+        if (d.scheduler?.next_jobs?.length) {
+            html += '<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">';
+            d.scheduler.next_jobs.forEach(j => {
+                html += `<span class="sys-sched-row">⏰ ${j.id.replace('scheduled_task_','')}# ${j.next_run}</span>`;
+            });
+            html += '</div>';
+        }
+
+        if (html) {
+            listEl.innerHTML = html;
+            listEl.style.display = 'block';
+        } else {
+            listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem;">系统空闲</div>';
+            listEl.style.display = 'block';
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// 启动轮询
+(function startSysStatusPolling() {
+    fetchSystemStatus();
+    _sysStatusTimer = setInterval(fetchSystemStatus, 3000);
+})();

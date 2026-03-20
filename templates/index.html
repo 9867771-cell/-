@@ -130,6 +130,59 @@
         .msd-item input[type=checkbox] { margin: 0; cursor: pointer; }
         .msd-empty { padding: 8px 12px; color: var(--text-muted); font-size: 0.8rem; }
 
+        /* 系统状态面板 */
+        .sys-status-bar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 10px 14px;
+            font-size: 0.8rem;
+        }
+        .sys-status-bar .sys-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--text-muted);
+        }
+        .sys-item .sys-val {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .sys-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .sys-dot.idle { background: var(--success-color, #22c55e); animation: pulse-dot 2s infinite; }
+        .sys-dot.busy { background: var(--warning-color, #f59e0b); animation: pulse-dot 0.8s infinite; }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .sys-tasks-list {
+            padding: 0 14px 10px;
+            font-size: 0.78rem;
+        }
+        .sys-task-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            background: var(--surface-hover);
+            border-radius: 4px;
+            margin-bottom: 3px;
+            color: var(--text-secondary);
+        }
+        .sys-sched-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: var(--surface-hover);
+            border-radius: 10px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
         /* 响应式 */
         @media (max-width: 1024px) {
             .two-column-layout {
@@ -319,6 +372,23 @@
 
                 <!-- 右侧面板 -->
                 <div class="right-panel">
+                    <!-- 系统状态 -->
+                    <div class="card" id="sys-status-card">
+                        <div class="card-header">
+                            <h3><svg class="icon"><use href="/static/icons.svg#i-monitor"/></svg> 系统状态</h3>
+                            <span class="sys-dot idle" id="sys-dot"></span>
+                        </div>
+                        <div class="card-body" style="padding: 0;">
+                            <div class="sys-status-bar" id="sys-status-bar">
+                                <div class="sys-item">运行 <span class="sys-val" id="sys-uptime">-</span></div>
+                                <div class="sys-item">线程 <span class="sys-val" id="sys-threads">-</span></div>
+                                <div class="sys-item">WS <span class="sys-val" id="sys-ws">0</span></div>
+                                <div class="sys-item">调度 <span class="sys-val" id="sys-sched">-</span></div>
+                            </div>
+                            <div class="sys-tasks-list" id="sys-tasks-list" style="display:none;"></div>
+                        </div>
+                    </div>
+
                     <!-- 监控台 -->
                     <div class="card" id="console-card">
                         <div class="card-header">
