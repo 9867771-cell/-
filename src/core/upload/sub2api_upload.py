@@ -37,10 +37,10 @@ def _bind_accounts_to_group(
     group_id: int,
 ) -> int:
     """
-    导入后将账号绑定到指定分组。
+    导入后将账号逐个绑定到指定分组。
     1) 等待 1 秒让 Sub2API 完成索引
-    2) 逐个搜索账号获取 ID（Sub2API 无批量搜索接口）
-    3) 使用 bulk-update 一次性绑定所有账号到分组
+    2) 逐个搜索账号获取 ID
+    3) 逐个 PUT 绑定分组（bulk-update 返回200但实际不生效，改用逐个PUT）
     """
     base = api_url.rstrip("/")
     headers = {
@@ -51,11 +51,10 @@ def _bind_accounts_to_group(
     # 等待 Sub2API 完成导入索引
     time.sleep(1)
 
-    # 第一步：搜索所有账号，收集 ID
-    found_ids = []
-    found_emails = []
+    bound = 0
     for email in account_emails:
         try:
+            # 搜索账号获取 ID
             resp = cffi_requests.get(
                 f"{base}/api/v1/admin/accounts",
                 params={"search": email, "platform": "openai", "page": 1, "page_size": 5},
@@ -79,75 +78,29 @@ def _bind_accounts_to_group(
                 logger.warning(f"Sub2API 未找到刚导入的账号: {email}")
                 continue
 
-            found_ids.append(account_id)
-            found_emails.append(email)
-        except Exception as e:
-            logger.error(f"Sub2API 搜索账号异常: {email}, {e}")
-
-    if not found_ids:
-        logger.warning("Sub2API 未找到任何可绑定分组的账号")
-        return 0
-
-    # 第二步：使用 bulk-update 一次性绑定分组
-    try:
-        resp = cffi_requests.post(
-            f"{base}/api/v1/admin/accounts/bulk-update",
-            json={
-                "account_ids": found_ids,
-                "group_ids": [group_id],
-            },
-            headers=headers,
-            proxies=None,
-            timeout=30,
-            impersonate="chrome110",
-        )
-        if resp.status_code == 200:
-            logger.info(
-                f"Sub2API bulk-update 成功: {len(found_ids)} 个账号已绑定到分组 {group_id} "
-                f"({', '.join(found_emails[:3])}{'...' if len(found_emails) > 3 else ''})"
-            )
-            return len(found_ids)
-        else:
-            detail = ""
-            try:
-                detail = resp.json().get("message", resp.text[:200])
-            except Exception:
-                detail = resp.text[:200]
-            logger.warning(f"Sub2API bulk-update 失败: HTTP {resp.status_code}, {detail}")
-            # 回退：逐个 PUT 绑定
-            return _bind_accounts_fallback(found_ids, found_emails, base, headers, group_id)
-    except Exception as e:
-        logger.error(f"Sub2API bulk-update 异常: {e}")
-        return _bind_accounts_fallback(found_ids, found_emails, base, headers, group_id)
-
-
-def _bind_accounts_fallback(
-    account_ids: List[int],
-    emails: List[str],
-    base: str,
-    headers: dict,
-    group_id: int,
-) -> int:
-    """逐个 PUT 绑定分组（bulk-update 失败时的回退方案）"""
-    logger.info(f"Sub2API 回退到逐个 PUT 绑定分组 {group_id}")
-    bound = 0
-    for aid, email in zip(account_ids, emails):
-        try:
-            resp = cffi_requests.put(
-                f"{base}/api/v1/admin/accounts/{aid}",
+            # 逐个 PUT 绑定分组
+            put_resp = cffi_requests.put(
+                f"{base}/api/v1/admin/accounts/{account_id}",
                 json={"group_ids": [group_id]},
                 headers=headers,
                 proxies=None,
                 timeout=15,
                 impersonate="chrome110",
             )
-            if resp.status_code == 200:
+            if put_resp.status_code == 200:
                 bound += 1
-                logger.info(f"Sub2API 账号 {email} (ID={aid}) 已绑定到分组 {group_id}")
+                logger.info(f"Sub2API 账号 {email} (ID={account_id}) 已绑定到分组 {group_id}")
             else:
-                logger.warning(f"Sub2API 绑定分组失败: {email} (ID={aid}), HTTP {resp.status_code}")
+                resp_text = ""
+                try:
+                    resp_text = put_resp.text[:200]
+                except Exception:
+                    pass
+                logger.warning(f"Sub2API 绑定分组失败: {email} (ID={account_id}), HTTP {put_resp.status_code}, {resp_text}")
         except Exception as e:
             logger.error(f"Sub2API 绑定分组异常: {email}, {e}")
+
+    logger.info(f"Sub2API 分组绑定完成: {bound}/{len(account_emails)} 个账号已绑定到分组 {group_id}")
     return bound
 
 
