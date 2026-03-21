@@ -3,8 +3,8 @@ Sub2API 账号上传功能
 将账号以 sub2api-data 格式批量导入到 Sub2API 平台
 """
 
-import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import List, Tuple, Optional
 
@@ -16,6 +16,20 @@ from ...database.models import Account
 logger = logging.getLogger(__name__)
 
 
+def _parse_search_items(body: dict) -> list:
+    """解析 Sub2API 分页搜索响应，提取 items 列表。
+    Sub2API response.Paginated 格式: {"data": [...], "total": N, "page": N, "page_size": N}
+    """
+    if not isinstance(body, dict):
+        return []
+    d = body.get("data", body)
+    if isinstance(d, list):
+        return d
+    if isinstance(d, dict):
+        return d.get("items", d.get("data", []))
+    return []
+
+
 def _bind_accounts_to_group(
     account_emails: List[str],
     api_url: str,
@@ -24,17 +38,24 @@ def _bind_accounts_to_group(
 ) -> int:
     """
     导入后将账号绑定到指定分组。
-    通过搜索账号名(email)获取 ID，再 PUT 更新 group_ids。
+    1) 等待 1 秒让 Sub2API 完成索引
+    2) 逐个搜索账号获取 ID（Sub2API 无批量搜索接口）
+    3) 使用 bulk-update 一次性绑定所有账号到分组
     """
     base = api_url.rstrip("/")
     headers = {
         "Content-Type": "application/json",
         "x-api-key": api_key,
     }
-    bound = 0
+
+    # 等待 Sub2API 完成导入索引
+    time.sleep(1)
+
+    # 第一步：搜索所有账号，收集 ID
+    found_ids = []
+    found_emails = []
     for email in account_emails:
         try:
-            # 1) 搜索刚导入的账号
             resp = cffi_requests.get(
                 f"{base}/api/v1/admin/accounts",
                 params={"search": email, "platform": "openai", "page": 1, "page_size": 5},
@@ -47,16 +68,7 @@ def _bind_accounts_to_group(
                 logger.warning(f"Sub2API 搜索账号失败: {email}, HTTP {resp.status_code}")
                 continue
 
-            body = resp.json()
-            # 兼容多种分页响应格式
-            items = []
-            if isinstance(body, dict):
-                d = body.get("data", body)
-                if isinstance(d, list):
-                    items = d
-                elif isinstance(d, dict):
-                    items = d.get("items", d.get("data", []))
-
+            items = _parse_search_items(resp.json())
             account_id = None
             for item in items:
                 if isinstance(item, dict) and item.get("name") == email:
@@ -67,25 +79,75 @@ def _bind_accounts_to_group(
                 logger.warning(f"Sub2API 未找到刚导入的账号: {email}")
                 continue
 
-            # 2) 更新账号的 group_ids
-            resp2 = cffi_requests.put(
-                f"{base}/api/v1/admin/accounts/{account_id}",
+            found_ids.append(account_id)
+            found_emails.append(email)
+        except Exception as e:
+            logger.error(f"Sub2API 搜索账号异常: {email}, {e}")
+
+    if not found_ids:
+        logger.warning("Sub2API 未找到任何可绑定分组的账号")
+        return 0
+
+    # 第二步：使用 bulk-update 一次性绑定分组
+    try:
+        resp = cffi_requests.post(
+            f"{base}/api/v1/admin/accounts/bulk-update",
+            json={
+                "account_ids": found_ids,
+                "group_ids": [group_id],
+            },
+            headers=headers,
+            proxies=None,
+            timeout=30,
+            impersonate="chrome110",
+        )
+        if resp.status_code == 200:
+            logger.info(
+                f"Sub2API bulk-update 成功: {len(found_ids)} 个账号已绑定到分组 {group_id} "
+                f"({', '.join(found_emails[:3])}{'...' if len(found_emails) > 3 else ''})"
+            )
+            return len(found_ids)
+        else:
+            detail = ""
+            try:
+                detail = resp.json().get("message", resp.text[:200])
+            except Exception:
+                detail = resp.text[:200]
+            logger.warning(f"Sub2API bulk-update 失败: HTTP {resp.status_code}, {detail}")
+            # 回退：逐个 PUT 绑定
+            return _bind_accounts_fallback(found_ids, found_emails, base, headers, group_id)
+    except Exception as e:
+        logger.error(f"Sub2API bulk-update 异常: {e}")
+        return _bind_accounts_fallback(found_ids, found_emails, base, headers, group_id)
+
+
+def _bind_accounts_fallback(
+    account_ids: List[int],
+    emails: List[str],
+    base: str,
+    headers: dict,
+    group_id: int,
+) -> int:
+    """逐个 PUT 绑定分组（bulk-update 失败时的回退方案）"""
+    logger.info(f"Sub2API 回退到逐个 PUT 绑定分组 {group_id}")
+    bound = 0
+    for aid, email in zip(account_ids, emails):
+        try:
+            resp = cffi_requests.put(
+                f"{base}/api/v1/admin/accounts/{aid}",
                 json={"group_ids": [group_id]},
                 headers=headers,
                 proxies=None,
                 timeout=15,
                 impersonate="chrome110",
             )
-            if resp2.status_code == 200:
+            if resp.status_code == 200:
                 bound += 1
-                logger.info(f"Sub2API 账号 {email} (ID={account_id}) 已绑定到分组 {group_id}")
+                logger.info(f"Sub2API 账号 {email} (ID={aid}) 已绑定到分组 {group_id}")
             else:
-                logger.warning(
-                    f"Sub2API 绑定分组失败: {email} (ID={account_id}), HTTP {resp2.status_code}"
-                )
+                logger.warning(f"Sub2API 绑定分组失败: {email} (ID={aid}), HTTP {resp.status_code}")
         except Exception as e:
             logger.error(f"Sub2API 绑定分组异常: {email}, {e}")
-
     return bound
 
 
